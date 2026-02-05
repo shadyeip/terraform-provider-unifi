@@ -26,6 +26,48 @@ Use a hard-wired connection to your controller to use this provider.
 
 ## Installation
 
+### From This Fork (Recommended)
+
+This fork includes bug fixes not yet in the upstream provider. To install:
+
+1. Build the provider:
+   ```bash
+   git clone https://github.com/shadyeip/terraform-provider-unifi.git
+   cd terraform-provider-unifi
+   go build -o terraform-provider-unifi
+   ```
+
+2. Create the plugin directory and copy the binary:
+   ```bash
+   mkdir -p ~/.terraform.d/plugins/registry.terraform.io/filipowm/unifi/99.0.0/darwin_arm64
+   cp terraform-provider-unifi ~/.terraform.d/plugins/registry.terraform.io/filipowm/unifi/99.0.0/darwin_arm64/
+   ```
+
+   Replace `darwin_arm64` with your platform:
+   - `darwin_amd64` - macOS Intel
+   - `linux_amd64` - Linux x86_64
+   - `linux_arm64` - Linux ARM64
+
+3. Configure Terraform to use the local provider:
+   ```hcl
+   terraform {
+       required_providers {
+           unifi = {
+               source  = "filipowm/unifi"
+               version = "99.0.0"
+           }
+       }
+   }
+   ```
+
+4. Initialize Terraform:
+   ```bash
+   rm -f .terraform.lock.hcl
+   terraform init
+   ```
+
+### From Terraform Registry
+
 The provider is available in the [Terraform Registry](https://registry.terraform.io/providers/filipowm/unifi/latest). To use it in your Terraform configuration:
 
 ```hcl
