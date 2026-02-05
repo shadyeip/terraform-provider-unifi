@@ -426,3 +426,5 @@ require (
 	sigs.k8s.io/yaml v1.4.0 // indirect
 	tags.cncf.io/container-device-interface v0.8.1 // indirect
 )
+
+replace github.com/filipowm/go-unifi => github.com/shadyeip/go-unifi v1.8.1
