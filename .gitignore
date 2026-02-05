@@ -8,3 +8,6 @@ vendor/
 
 .idea
 *.iml
+# Built binaries
+terraform-provider-unifi_*
+terraform-provider-unifi

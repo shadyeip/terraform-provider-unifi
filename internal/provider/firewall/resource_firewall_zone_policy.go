@@ -3,6 +3,8 @@ package firewall
 import (
 	"context"
 	"fmt"
+	"strconv"
+
 	"github.com/filipowm/go-unifi/unifi"
 	"github.com/filipowm/go-unifi/unifi/features"
 	"github.com/filipowm/terraform-provider-unifi/internal/provider/base"
@@ -107,16 +109,23 @@ func (m *FirewallPolicyTargetModel) AttributeTypes() map[string]attr.Type {
 	}
 }
 
-func NewFirewallPolicyTargetModel(ipGroupId string, ips []string, matchOppositeIps, matchOppositePorts bool, port int, portGroupId, zoneId string) *FirewallPolicyTargetModel {
+func NewFirewallPolicyTargetModel(ipGroupId string, ips []string, matchOppositeIps, matchOppositePorts bool, port string, portGroupId, zoneId string) *FirewallPolicyTargetModel {
 	diags := diag.Diagnostics{}
 	m := &FirewallPolicyTargetModel{
 		IPGroupID:          ut.StringOrNull(ipGroupId),
 		IPs:                types.ListNull(types.StringType),
 		MatchOppositeIPs:   types.BoolValue(matchOppositeIps),
 		MatchOppositePorts: types.BoolValue(matchOppositePorts),
-		Port:               ut.Int32OrNull(port),
+		Port:               types.Int32Null(),
 		PortGroupID:        ut.StringOrNull(portGroupId),
 		ZoneID:             types.StringValue(zoneId),
+	}
+
+	// Handle port - convert string to int32 if it's a simple port number
+	if port != "" {
+		if portInt, err := strconv.Atoi(port); err == nil {
+			m.Port = types.Int32Value(int32(portInt))
+		}
 	}
 
 	// Handle IPs list
@@ -159,10 +168,12 @@ func (m *FirewallZonePolicySourceModel) AttributeTypes() map[string]attr.Type {
 // FirewallZonePolicyDestinationModel represents the destination configuration for a firewall zone policy
 type FirewallZonePolicyDestinationModel struct {
 	FirewallPolicyTargetModel
-	AppCategoryIDs types.List `tfsdk:"app_category_ids"`
-	AppIDs         types.List `tfsdk:"app_ids"`
-	Regions        types.List `tfsdk:"regions"`
-	WebDomains     types.List `tfsdk:"web_domains"`
+	AppCategoryIDs        types.List `tfsdk:"app_category_ids"`
+	AppIDs                types.List `tfsdk:"app_ids"`
+	MatchOppositeNetworks types.Bool `tfsdk:"match_opposite_networks"`
+	NetworkIDs            types.List `tfsdk:"network_ids"`
+	Regions               types.List `tfsdk:"regions"`
+	WebDomains            types.List `tfsdk:"web_domains"`
 }
 
 func (m *FirewallZonePolicyDestinationModel) AttributeTypes() map[string]attr.Type {
@@ -171,6 +182,10 @@ func (m *FirewallZonePolicyDestinationModel) AttributeTypes() map[string]attr.Ty
 			ElemType: types.StringType,
 		},
 		"app_ids": types.ListType{
+			ElemType: types.StringType,
+		},
+		"match_opposite_networks": types.BoolType,
+		"network_ids": types.ListType{
 			ElemType: types.StringType,
 		},
 		"regions": types.ListType{
@@ -286,7 +301,7 @@ func (m *FirewallZonePolicyModel) AsUnifiModel(ctx context.Context) (interface{}
 
 		if ut.IsDefined(source.Port) {
 			unifiSource.PortMatchingType = "SPECIFIC"
-			unifiSource.Port = int(source.Port.ValueInt32())
+			unifiSource.Port = strconv.Itoa(int(source.Port.ValueInt32()))
 		}
 
 		if len(source.ClientMACs.Elements()) > 0 {
@@ -324,11 +339,12 @@ func (m *FirewallZonePolicyModel) AsUnifiModel(ctx context.Context) (interface{}
 		diags.Append(m.Destination.As(ctx, &destination, basetypes.ObjectAsOptions{})...)
 
 		unifiDestination := &unifi.FirewallZonePolicyDestination{
-			MatchOppositeIPs:   destination.MatchOppositeIPs.ValueBool(),
-			MatchOppositePorts: destination.MatchOppositePorts.ValueBool(),
-			MatchingTarget:     "ANY",
-			PortMatchingType:   "ANY",
-			ZoneID:             destination.ZoneID.ValueString(),
+			MatchOppositeIPs:      destination.MatchOppositeIPs.ValueBool(),
+			MatchOppositeNetworks: destination.MatchOppositeNetworks.ValueBool(),
+			MatchOppositePorts:    destination.MatchOppositePorts.ValueBool(),
+			MatchingTarget:        "ANY",
+			PortMatchingType:      "ANY",
+			ZoneID:                destination.ZoneID.ValueString(),
 		}
 
 		if ut.IsDefined(destination.PortGroupID) {
@@ -338,7 +354,7 @@ func (m *FirewallZonePolicyModel) AsUnifiModel(ctx context.Context) (interface{}
 
 		if ut.IsDefined(destination.Port) {
 			unifiDestination.PortMatchingType = "SPECIFIC"
-			unifiDestination.Port = int(destination.Port.ValueInt32())
+			unifiDestination.Port = strconv.Itoa(int(destination.Port.ValueInt32()))
 		}
 
 		if len(destination.AppCategoryIDs.Elements()) > 0 {
@@ -369,6 +385,11 @@ func (m *FirewallZonePolicyModel) AsUnifiModel(ctx context.Context) (interface{}
 		if len(destination.WebDomains.Elements()) > 0 {
 			diags.Append(ut.ListElementsAs(destination.WebDomains, &unifiDestination.WebDomains)...)
 			unifiDestination.MatchingTarget = "WEB"
+			unifiDestination.MatchingTargetType = "SPECIFIC"
+		}
+		if len(destination.NetworkIDs.Elements()) > 0 {
+			diags.Append(ut.ListElementsAs(destination.NetworkIDs, &unifiDestination.NetworkIDs)...)
+			unifiDestination.MatchingTarget = "NETWORK"
 			unifiDestination.MatchingTargetType = "SPECIFIC"
 		}
 		model.Destination = *unifiDestination
@@ -444,6 +465,8 @@ func (m *FirewallZonePolicyModel) mergeDestination(ctx context.Context, model *u
 		FirewallPolicyTargetModel: *NewFirewallPolicyTargetModel(model.Destination.IPGroupID, model.Destination.IPs, model.Destination.MatchOppositeIPs, model.Destination.MatchOppositePorts, model.Destination.Port, model.Destination.PortGroupID, model.Destination.ZoneID),
 		AppCategoryIDs:            types.ListNull(types.StringType),
 		AppIDs:                    types.ListNull(types.StringType),
+		MatchOppositeNetworks:     types.BoolValue(model.Destination.MatchOppositeNetworks),
+		NetworkIDs:                types.ListNull(types.StringType),
 		Regions:                   types.ListNull(types.StringType),
 		WebDomains:                types.ListNull(types.StringType),
 	}
@@ -456,6 +479,10 @@ func (m *FirewallZonePolicyModel) mergeDestination(ctx context.Context, model *u
 		apps, d := types.ListValueFrom(ctx, types.StringType, model.Destination.AppIDs)
 		diags.Append(d...)
 		destModel.AppIDs = apps
+	case "NETWORK":
+		networks, d := types.ListValueFrom(ctx, types.StringType, model.Destination.NetworkIDs)
+		diags.Append(d...)
+		destModel.NetworkIDs = networks
 	case "REGION":
 		regions, d := types.ListValueFrom(ctx, types.StringType, model.Destination.Regions)
 		diags.Append(d...)
@@ -468,7 +495,7 @@ func (m *FirewallZonePolicyModel) mergeDestination(ctx context.Context, model *u
 	case "ANY":
 		// do nothing as handled commonly
 	default:
-		diags.AddWarning("Unexpected matching target", fmt.Sprintf("Destination matching target is %s, which is not supported by the provider", model.Source.MatchingTarget))
+		diags.AddWarning("Unexpected matching target", fmt.Sprintf("Destination matching target is %s, which is not supported by the provider", model.Destination.MatchingTarget))
 	}
 
 	// Create object value from source model
@@ -790,6 +817,7 @@ func (r *firewallZonePolicyResource) Schema(ctx context.Context, _ resource.Sche
 							listvalidator.ConflictsWith(
 								path.MatchRoot("destination").AtName("app_ids"),
 								path.MatchRoot("destination").AtName("ips"),
+								path.MatchRoot("destination").AtName("network_ids"),
 								path.MatchRoot("destination").AtName("regions"),
 								path.MatchRoot("destination").AtName("web_domains"),
 							),
@@ -803,6 +831,28 @@ func (r *firewallZonePolicyResource) Schema(ctx context.Context, _ resource.Sche
 							listvalidator.SizeAtLeast(1),
 							listvalidator.ConflictsWith(
 								path.MatchRoot("destination").AtName("app_category_ids"),
+								path.MatchRoot("destination").AtName("ips"),
+								path.MatchRoot("destination").AtName("network_ids"),
+								path.MatchRoot("destination").AtName("regions"),
+								path.MatchRoot("destination").AtName("web_domains"),
+							),
+						},
+					},
+					"match_opposite_networks": schema.BoolAttribute{
+						MarkdownDescription: "Whether to match opposite networks.",
+						Optional:            true,
+						Computed:            true,
+						Default:             booldefault.StaticBool(false),
+					},
+					"network_ids": schema.ListAttribute{
+						MarkdownDescription: "List of network IDs.",
+						Optional:            true,
+						ElementType:         types.StringType,
+						Validators: []validator.List{
+							listvalidator.SizeAtLeast(1),
+							listvalidator.ConflictsWith(
+								path.MatchRoot("destination").AtName("app_category_ids"),
+								path.MatchRoot("destination").AtName("app_ids"),
 								path.MatchRoot("destination").AtName("ips"),
 								path.MatchRoot("destination").AtName("regions"),
 								path.MatchRoot("destination").AtName("web_domains"),
@@ -820,6 +870,7 @@ func (r *firewallZonePolicyResource) Schema(ctx context.Context, _ resource.Sche
 								path.MatchRoot("destination").AtName("app_category_ids"),
 								path.MatchRoot("destination").AtName("app_ids"),
 								path.MatchRoot("destination").AtName("ips"),
+								path.MatchRoot("destination").AtName("network_ids"),
 								path.MatchRoot("destination").AtName("web_domains"),
 							),
 						},
@@ -837,6 +888,7 @@ func (r *firewallZonePolicyResource) Schema(ctx context.Context, _ resource.Sche
 								path.MatchRoot("destination").AtName("app_category_ids"),
 								path.MatchRoot("destination").AtName("app_ids"),
 								path.MatchRoot("destination").AtName("ips"),
+								path.MatchRoot("destination").AtName("network_ids"),
 								path.MatchRoot("destination").AtName("regions"),
 							),
 						},
