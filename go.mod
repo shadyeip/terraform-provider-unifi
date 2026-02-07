@@ -427,4 +427,4 @@ require (
 	tags.cncf.io/container-device-interface v0.8.1 // indirect
 )
 
-replace github.com/filipowm/go-unifi => github.com/shadyeip/go-unifi v1.8.1
+replace github.com/filipowm/go-unifi => ../go-unifi

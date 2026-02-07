@@ -26,56 +26,76 @@ Use a hard-wired connection to your controller to use this provider.
 
 ## Installation
 
-### From This Fork (Recommended)
+### Building from Source
 
-This fork includes bug fixes not yet in the upstream provider. To install:
+This repo includes the `go-unifi` SDK as a local module (in `../go-unifi`). Both are built together — no external repo references needed.
 
-1. Build the provider:
-   ```bash
-   git clone https://github.com/shadyeip/terraform-provider-unifi.git
-   cd terraform-provider-unifi
-   go build -o terraform-provider-unifi
-   ```
+**Prerequisites:** Go 1.23+, Terraform 1.0+
 
-2. Create the plugin directory and copy the binary:
-   ```bash
-   mkdir -p ~/.terraform.d/plugins/registry.terraform.io/filipowm/unifi/99.0.0/darwin_arm64
-   cp terraform-provider-unifi ~/.terraform.d/plugins/registry.terraform.io/filipowm/unifi/99.0.0/darwin_arm64/
-   ```
+#### Build and install locally (macOS)
 
-   Replace `darwin_arm64` with your platform:
-   - `darwin_amd64` - macOS Intel
-   - `linux_amd64` - Linux x86_64
-   - `linux_arm64` - Linux ARM64
+```bash
+make install
+```
 
-3. Configure Terraform to use the local provider:
-   ```hcl
-   terraform {
-       required_providers {
-           unifi = {
-               source  = "filipowm/unifi"
-               version = "99.0.0"
-           }
-       }
-   }
-   ```
+This builds the provider and installs it to `~/.terraform.d/plugins/` for local use.
 
-4. Initialize Terraform:
-   ```bash
-   rm -f .terraform.lock.hcl
-   terraform init
-   ```
+#### Cross-compile for a remote host (e.g. UDM-SE, Linux ARM64 docker-host)
 
-### From Terraform Registry
+```bash
+make build-linux-arm64
+```
 
-The provider is available in the [Terraform Registry](https://registry.terraform.io/providers/filipowm/unifi/latest). To use it in your Terraform configuration:
+Then deploy to the remote host:
+
+```bash
+make deploy DEPLOY_HOST=root@<your-udm-ip>
+```
+
+Or manually:
+
+```bash
+scp terraform-provider-unifi_linux_arm64 root@<host>:~/.terraform.d/plugins/registry.terraform.io/filipowm/unifi/99.0.0/linux_arm64/terraform-provider-unifi
+```
+
+#### All-in-one: build, deploy, and init on remote host
+
+```bash
+make deploy DEPLOY_HOST=root@<your-udm-ip> TF_DIR=/path/to/terraform/configs
+```
+
+### Terraform Configuration
+
+Configure your `versions.tf` to use the local provider:
 
 ```hcl
 terraform {
     required_providers {
         unifi = {
             source  = "filipowm/unifi"
-            version = "~> 1.0.0"  # Use the latest version
+            version = "= 99.0.0"
+        }
+    }
+}
+```
+
+After building/deploying, initialize Terraform:
+
+```bash
+rm -f .terraform.lock.hcl
+terraform init
+```
+
+### From Terraform Registry
+
+The upstream provider is available in the [Terraform Registry](https://registry.terraform.io/providers/filipowm/unifi/latest):
+
+```hcl
+terraform {
+    required_providers {
+        unifi = {
+            source  = "filipowm/unifi"
+            version = "~> 1.0.0"
         }
     }
 }
