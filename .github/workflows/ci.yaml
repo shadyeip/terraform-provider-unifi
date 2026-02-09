@@ -1,34 +1,79 @@
 ---
+name: ci
+
 on:
   pull_request: {}
   push:
     branches:
-      - "main"
-    tags:
-      - "v*"
+      - main
 
 jobs:
-  build:
-    runs-on: "ubuntu-latest"
+  # Runs on PRs: fast validation checks
+  validate:
+    if: github.event_name == 'pull_request'
+    runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-go@v5
+      - name: Checkout provider
+        uses: actions/checkout@v4
         with:
-          go-version-file: "go.mod"
+          path: terraform-provider-unifi
+
+      - name: Checkout go-unifi dependency
+        uses: actions/checkout@v4
+        with:
+          repository: shadyeip/go-unifi
+          path: go-unifi
+
+      - name: Set up Go
+        uses: actions/setup-go@v5
+        with:
+          go-version-file: terraform-provider-unifi/go.mod
           cache: true
           check-latest: true
 
-      - run: "go build ./..."
+      - name: Check formatting
+        working-directory: terraform-provider-unifi
+        run: |
+          unformatted=$(gofmt -l .)
+          if [ -n "$unformatted" ]; then
+            echo "::error::Files not formatted with gofmt:"
+            echo "$unformatted"
+            exit 1
+          fi
 
-  lint:
-    runs-on: "ubuntu-latest"
-    steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-go@v5
+      - name: Vet
+        working-directory: terraform-provider-unifi
+        run: go vet ./...
+
+      - name: Lint
+        uses: golangci/golangci-lint-action@v6.5.2
         with:
-          go-version-file: "go.mod"
+          working-directory: terraform-provider-unifi
+          skip-pkg-cache: true
+
+  # Runs on merge to main: full build
+  build:
+    if: github.event_name == 'push'
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout provider
+        uses: actions/checkout@v4
+        with:
+          path: terraform-provider-unifi
+
+      - name: Checkout go-unifi dependency
+        uses: actions/checkout@v4
+        with:
+          repository: shadyeip/go-unifi
+          path: go-unifi
+
+      - name: Set up Go
+        uses: actions/setup-go@v5
+        with:
+          go-version-file: terraform-provider-unifi/go.mod
+          cache: true
           check-latest: true
 
-      - uses: "golangci/golangci-lint-action@v6.5.2"
-        with:
-          skip-pkg-cache: true
+      - name: Build
+        working-directory: terraform-provider-unifi
+        run: go build ./...

@@ -1,35 +1,74 @@
-name: goreleaser
+name: release
 
 on:
   push:
     tags:
       - "v*"
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: "Version tag to release (e.g. v1.0.0)"
+        required: true
+        type: string
+
 jobs:
-  goreleaser:
+  release:
     runs-on: ubuntu-latest
     concurrency: release
     permissions:
       contents: write
     steps:
-      - name: Checkout
+      - name: Checkout provider
         uses: actions/checkout@v4
         with:
           fetch-depth: 0
+          path: terraform-provider-unifi
+
+      - name: Checkout go-unifi dependency
+        uses: actions/checkout@v4
+        with:
+          repository: shadyeip/go-unifi
+          path: go-unifi
+
       - name: Set up Go
         uses: actions/setup-go@v5
         with:
-          go-version-file: "go.mod"
+          go-version-file: "terraform-provider-unifi/go.mod"
           check-latest: false
+
+      - name: Determine version
+        id: version
+        working-directory: terraform-provider-unifi
+        run: |
+          if [ "${{ github.event_name }}" = "workflow_dispatch" ]; then
+            echo "tag=${{ inputs.tag }}" >> "$GITHUB_OUTPUT"
+          else
+            echo "tag=${GITHUB_REF#refs/tags/}" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Create tag (workflow_dispatch only)
+        if: github.event_name == 'workflow_dispatch'
+        working-directory: terraform-provider-unifi
+        run: |
+          git tag "${{ steps.version.outputs.tag }}"
+
       - name: Import GPG key
+        if: env.GPG_PRIVATE_KEY != ''
         id: import_gpg
         uses: crazy-max/ghaction-import-gpg@v6
         with:
           gpg_private_key: ${{ secrets.GPG_PRIVATE_KEY }}
+        env:
+          GPG_PRIVATE_KEY: ${{ secrets.GPG_PRIVATE_KEY }}
+
       - name: Run GoReleaser
         uses: goreleaser/goreleaser-action@v6
         with:
           version: latest
-          args: release --parallelism 2 --clean
+          args: >-
+            release --parallelism 2 --clean
+            ${{ steps.import_gpg.outputs.fingerprint == '' && '--skip=sign' || '' }}
+          workdir: terraform-provider-unifi
         env:
           GPG_FINGERPRINT: ${{ steps.import_gpg.outputs.fingerprint }}
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
