@@ -1,20 +1,5 @@
 name: Acceptance Tests
 on:
-  push:
-    branches:
-      - "main"
-    tags:
-      - "v*"
-    paths:
-      - "internal/**"
-      - "scripts/**"
-      - "tools/**"
-      - "main.go"
-      - "docker-compose.yaml"
-      - ".github/workflows/acctest.yml"
-      - "Makefile"
-  schedule:
-    - cron: "0 13 * * *"
   workflow_dispatch:
 
 
