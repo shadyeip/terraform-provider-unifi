@@ -2,13 +2,15 @@ name: release
 
 on:
   push:
+    branches:
+      - main
     tags:
       - "v*"
   workflow_dispatch:
     inputs:
       tag:
-        description: "Version tag to release (e.g. v1.0.0)"
-        required: true
+        description: "Version tag to release (e.g. v2026.02.09)"
+        required: false
         type: string
 
 jobs:
@@ -40,17 +42,28 @@ jobs:
         id: version
         working-directory: terraform-provider-unifi
         run: |
-          if [ "${{ github.event_name }}" = "workflow_dispatch" ]; then
-            echo "tag=${{ inputs.tag }}" >> "$GITHUB_OUTPUT"
+          if [ -n "${{ inputs.tag }}" ]; then
+            TAG="${{ inputs.tag }}"
+          elif [[ "$GITHUB_REF" == refs/tags/* ]]; then
+            TAG="${GITHUB_REF#refs/tags/}"
           else
-            echo "tag=${GITHUB_REF#refs/tags/}" >> "$GITHUB_OUTPUT"
+            # Date-based version: v2026.02.09, v2026.02.09.1, v2026.02.09.2, ...
+            DATE_TAG="v$(date -u +'%Y.%m.%d')"
+            SUFFIX=0
+            TAG="$DATE_TAG"
+            while git rev-parse "$TAG" >/dev/null 2>&1; do
+              SUFFIX=$((SUFFIX + 1))
+              TAG="${DATE_TAG}.${SUFFIX}"
+            done
           fi
+          echo "tag=$TAG" >> "$GITHUB_OUTPUT"
 
-      - name: Create tag (workflow_dispatch only)
-        if: github.event_name == 'workflow_dispatch'
+      - name: Create and push tag
+        if: ${{ !startsWith(github.ref, 'refs/tags/') }}
         working-directory: terraform-provider-unifi
         run: |
           git tag "${{ steps.version.outputs.tag }}"
+          git push origin "${{ steps.version.outputs.tag }}"
 
       - name: Import GPG key
         if: env.GPG_PRIVATE_KEY != ''
