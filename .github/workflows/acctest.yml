@@ -1,17 +1,5 @@
 name: Acceptance Tests
 on:
-  pull_request:
-    branches:
-      - "*"
-#    paths:
-#      - "internal/**"
-#      - "scripts/**"
-#      - "tools/**"
-#      - "main.go"
-#      - "docker-compose.yaml"
-#      - ".github/workflows/acctest.yml"
-#      - "Makefile"
-#      - "go.mod"
   push:
     branches:
       - "main"
